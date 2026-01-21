@@ -1,9 +1,9 @@
 # OC-D-Portfolio
 A portfolio of projects and scripts utilising Python coding
 
-==========================================================
+====
 NORMALITY AND OUTLIERS SCRIPT
-==========================================================
+====
 A Python script utilising Pandas, SciPy, NumPy, Matplotlib and Seaborn packages
 The script automates the normality of distribution and outlier variables checks.
 
