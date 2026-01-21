@@ -1,0 +1,376 @@
+import pandas as pd
+from scipy import stats
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+df = pd.read_excel(r'')
+
+sns.set_style("whitegrid")
+
+print("=" * 80)
+print("NORMALITY AND OUTLIER CHECK FOR MULTIPLE VARIABLES")
+print("=" * 80)
+
+variables = ['Age_MD1', 'BMI_MD1']
+
+
+def detect_outliers(data, variable_name):
+    data_clean = pd.Series(data).dropna()
+    
+    outliers_info = {
+        'variable': variable_name,
+        'n_total': len(data_clean),
+        'outliers_iqr': [],
+        'outliers_zscore': [],
+        'outliers_modified_z': []
+    }
+    
+# IQR method (Tukey's fences)
+    Q1 = data_clean.quantile(0.25)
+    Q3 = data_clean.quantile(0.75)
+    IQR = Q3 - Q1
+    lower_fence = Q1 - 1.5 * IQR
+    upper_fence = Q3 + 1.5 * IQR
+    
+    outliers_iqr = data_clean[(data_clean < lower_fence) | (data_clean > upper_fence)]
+    outliers_info['outliers_iqr'] = outliers_iqr.tolist()
+    outliers_info['n_outliers_iqr'] = len(outliers_iqr)
+    outliers_info['lower_fence'] = lower_fence
+    outliers_info['upper_fence'] = upper_fence
+    
+# Z-score method
+    mean = data_clean.mean()
+    std = data_clean.std()
+    z_scores = np.abs((data_clean - mean) / std)
+    outliers_zscore = data_clean[z_scores > 3]
+    outliers_info['outliers_zscore'] = outliers_zscore.tolist()
+    outliers_info['n_outliers_zscore'] = len(outliers_zscore)
+    
+# Modified Z-score (using median absolute deviation - more robust)
+    median = data_clean.median()
+    mad = np.median(np.abs(data_clean - median))
+    modified_z_scores = 0.6745 * (data_clean - median) / mad if mad != 0 else np.zeros(len(data_clean))
+    outliers_modified = data_clean[np.abs(modified_z_scores) > 3.5]
+    outliers_info['outliers_modified_z'] = outliers_modified.tolist()
+    outliers_info['n_outliers_modified_z'] = len(outliers_modified)
+    
+    return outliers_info
+
+# Checking normality and plots 
+
+def check_variable(data, variable_name, dataframe=None):
+    print(f"\n{'='*80}")
+    print(f"VARIABLE: {variable_name}")
+    print(f"{'='*80}")
+    
+    data_clean = pd.Series(data).dropna()
+    n = len(data_clean)
+    n_missing = len(data) - n
+    
+    if n == 0:
+        print(f"No data available for {variable_name}")
+        return None
+    
+    print(f"\nSample Size: n = {n}")
+    if n_missing > 0:
+        print(f"Missing values: {n_missing}")
+    
+    print(f"\n--- Descriptive Statistics ---")
+    mean = data_clean.mean()
+    median = data_clean.median()
+    std = data_clean.std()
+    min_val = data_clean.min()
+    max_val = data_clean.max()
+    q1 = data_clean.quantile(0.25)
+    q3 = data_clean.quantile(0.75)
+    
+    print(f"Mean:     {mean:.2f}")
+    print(f"Median:   {median:.2f}")
+    print(f"SD:       {std:.2f}")
+    print(f"Min:      {min_val:.2f}")
+    print(f"Q1:       {q1:.2f}")
+    print(f"Q3:       {q3:.2f}")
+    print(f"Max:      {max_val:.2f}")
+    print(f"Range:    {min_val:.2f} - {max_val:.2f}")
+    
+    print(f"\n--- Normality Tests ---")
+    
+    skewness = stats.skew(data_clean)
+    kurtosis = stats.kurtosis(data_clean)
+    
+    print(f"Skewness: {skewness:.3f}", end="")
+    if abs(skewness) < 0.5:
+        print("(approximately symmetric)")
+    elif skewness > 0:
+        print("(right-skewed)")
+    else:
+        print("(left-skewed)")
+    
+    print(f"Kurtosis: {kurtosis:.3f}", end="")
+    if abs(kurtosis) < 2:
+        print("(acceptable)")
+    else:
+        print("(heavy tails)")
+    
+    if n >= 3:
+        w_stat, p_shapiro = stats.shapiro(data_clean)
+        print(f"\nShapiro-Wilk Test:")
+        print(f"  W = {w_stat:.4f}, p = {p_shapiro:.4f}", end="")
+        if p_shapiro > 0.05:
+            print("(normal)")
+        else:
+            print("(not normal)")
+            
+    tests_passed = 0
+    if abs(skewness) < 0.5:
+        tests_passed += 1
+    if abs(kurtosis) < 2:
+        tests_passed += 1
+    if n >= 3 and p_shapiro > 0.05:
+        tests_passed += 1
+    if abs(mean - median) < std * 0.25:
+        tests_passed += 1
+    
+    print(f"\nNormality Conclusion: ", end="")
+    if tests_passed >= 3:
+        print("NORMAL - Use parametric tests")
+    elif tests_passed >= 2:
+        print("BORDERLINE - Non-parametric safer")
+    else:
+        print("NOT NORMAL - Use non-parametric tests")
+    
+    print(f"\n--- Outlier Detection ---")
+    outliers_info = detect_outliers(data_clean, variable_name)
+    
+    print(f"IQR Method (1.5 × IQR):")
+    print(f"  Fences: [{outliers_info['lower_fence']:.2f}, {outliers_info['upper_fence']:.2f}]")
+    print(f"  Outliers detected: {outliers_info['n_outliers_iqr']}")
+    if outliers_info['n_outliers_iqr'] > 0:
+        print(f"Values: {[f'{x:.2f}' for x in outliers_info['outliers_iqr']]}")
+        if dataframe is not None and 'ID' in dataframe.columns:
+            outlier_ids = []
+            for outlier_val in outliers_info['outliers_iqr']:
+                mask = dataframe[variable_name] == outlier_val
+                ids = dataframe.loc[mask, 'ID'].values.tolist()
+                outlier_ids.extend(ids)
+            print(f"IDs: {outlier_ids}")
+    
+    print(f"\nZ-score Method (|z| > 3):")
+    print(f"  Outliers detected: {outliers_info['n_outliers_zscore']}")
+    if outliers_info['n_outliers_zscore'] > 0:
+        print(f"  Values: {[f'{x:.2f}' for x in outliers_info['outliers_zscore']]}")
+        if dataframe is not None and 'ID' in dataframe.columns:
+            outlier_ids = []
+            for outlier_val in outliers_info['outliers_zscore']:
+                mask = dataframe[variable_name] == outlier_val
+                ids = dataframe.loc[mask, 'ID'].values.tolist()
+                outlier_ids.extend(ids)
+            print(f"IDs: {outlier_ids}")
+    
+    print(f"\nModified Z-score Method (robust):")
+    print(f"  Outliers detected: {outliers_info['n_outliers_modified_z']}")
+    if outliers_info['n_outliers_modified_z'] > 0:
+        print(f"  Values: {[f'{x:.2f}' for x in outliers_info['outliers_modified_z']]}")
+        if dataframe is not None and 'ID' in dataframe.columns:
+            outlier_ids = []
+            for outlier_val in outliers_info['outliers_modified_z']:
+                mask = dataframe[variable_name] == outlier_val
+                ids = dataframe.loc[mask, 'ID'].values.tolist()
+                outlier_ids.extend(ids)
+            print(f"IDs: {outlier_ids}")
+    
+    total_outliers = max(outliers_info['n_outliers_iqr'], 
+                        outliers_info['n_outliers_zscore'],
+                        outliers_info['n_outliers_modified_z'])
+    
+    print(f"\nOutlier Conclusion: ", end="")
+    if total_outliers == 0:
+        print("No outliers detected")
+    elif total_outliers <= 2:
+        print(f" {total_outliers} potential outlier(s) - Review carefully")
+    else:
+        print(f" {total_outliers} outliers detected - Consider transformation or non-parametric tests")
+    
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig.suptitle(f'{variable_name} - Normality and Outlier Check', 
+                 fontsize=14, fontweight='bold')
+    
+    # Histogram
+    axes[0].hist(data_clean, bins=15, density=True, alpha=0.7, 
+                 color='skyblue', edgecolor='black', label='Data')
+    
+    xmin, xmax = axes[0].get_xlim()
+    x = np.linspace(xmin, xmax, 100)
+    p = stats.norm.pdf(x, mean, std)
+    axes[0].plot(x, p, 'r-', linewidth=2, label='Normal curve')
+    
+    axes[0].axvline(mean, color='red', linestyle='--', linewidth=2, 
+                    label=f'Mean={mean:.1f}')
+    axes[0].axvline(median, color='blue', linestyle='--', linewidth=2, 
+                    label=f'Median={median:.1f}')
+    axes[0].set_xlabel(variable_name, fontsize=12)
+    axes[0].set_ylabel('Density', fontsize=12)
+    axes[0].set_title('Histogram with Normal Curve', fontsize=12)
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+    
+    normality_text = "Normal" if tests_passed >= 3 else "Not Normal"
+    axes[0].text(0.02, 0.98, f'Shapiro-Wilk: p={p_shapiro:.4f}\n{normality_text}',
+                transform=axes[0].transAxes, fontsize=10,
+                verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    
+    # Boxplot
+    bp = axes[1].boxplot(data_clean, vert=True, patch_artist=True,
+                         notch=True, showmeans=True,
+                         boxprops=dict(facecolor='lightblue', alpha=0.7),
+                         medianprops=dict(color='red', linewidth=2),
+                         meanprops=dict(marker='D', markerfacecolor='green', 
+                                       markersize=8, markeredgecolor='darkgreen'),
+                         whiskerprops=dict(linewidth=1.5),
+                         capprops=dict(linewidth=1.5),
+                         flierprops=dict(marker='o', markerfacecolor='red', 
+                                        markersize=8, markeredgecolor='darkred',
+                                        alpha=0.7))
+    
+    axes[1].set_ylabel(variable_name, fontsize=12)
+    axes[1].set_title('Boxplot', fontsize=12)
+    axes[1].grid(True, alpha=0.3, axis='y')
+    
+    if outliers_info['n_outliers_iqr'] > 0 and dataframe is not None and 'ID' in dataframe.columns:
+        outlier_values = outliers_info['outliers_iqr']
+        for outlier_val in outlier_values:
+            mask = dataframe[variable_name] == outlier_val
+            outlier_ids = dataframe.loc[mask, 'ID'].values
+            
+            for id_val in outlier_ids:
+
+                axes[1].text(1.05, outlier_val, f'ID:{id_val}', 
+                           fontsize=8, verticalalignment='center',
+                           bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7))
+    
+    outlier_text = f"IQR outliers: {outliers_info['n_outliers_iqr']}\nZ-score outliers: {outliers_info['n_outliers_zscore']}"
+    axes[1].text(0.02, 0.98, outlier_text,
+                transform=axes[1].transAxes, fontsize=10,
+                verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor='red', label='Median'),
+        plt.Line2D([0], [0], marker='D', color='w', 
+                   markerfacecolor='green', markersize=8, label='Mean'),
+        plt.Line2D([0], [0], marker='o', color='w', 
+                   markerfacecolor='red', markersize=8, label='Outliers')
+    ]
+    axes[1].legend(handles=legend_elements, loc='lower right')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return {
+        'Variable': variable_name,
+        'N': n,
+        'Missing': n_missing,
+        'Mean': mean,
+        'Median': median,
+        'SD': std,
+        'Skewness': skewness,
+        'Kurtosis': kurtosis,
+        'Shapiro_p': p_shapiro if n >= 3 else None,
+        'Normal': 'Yes' if tests_passed >= 3 else 'No',
+        'Outliers_IQR': outliers_info['n_outliers_iqr'],
+        'Outliers_Zscore': outliers_info['n_outliers_zscore']
+    }
+
+results_list = []
+
+for var in variables:
+    if var in df.columns:
+        result = check_variable(df[var], var, dataframe=df)
+        if result:
+            results_list.append(result)
+    else:
+        print(f"\nVariable '{var}' not found in dataframe")
+
+print("\n\n" + "=" * 80)
+print("SUMMARY TABLE - ALL VARIABLES")
+print("=" * 80)
+
+results_df = pd.DataFrame(results_list)
+print("\n" + results_df.to_string(index=False))
+
+valid_vars = [var for var in variables if var in df.columns and df[var].notna().sum() > 0]
+n_vars = len(valid_vars)
+
+if n_vars > 0:
+    n_cols = 3
+    n_rows = (n_vars + n_cols - 1) // n_cols
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5*n_rows))
+    fig.suptitle('Boxplots - All Variables', fontsize=16, fontweight='bold')
+    
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    axes_flat = axes.flatten()
+    
+    for idx, var in enumerate(valid_vars):
+        data_clean = df[var].dropna()
+        
+        bp = axes_flat[idx].boxplot(data_clean, vert=True, patch_artist=True,
+                                     notch=True, showmeans=True,
+                                     boxprops=dict(facecolor='lightblue', alpha=0.7),
+                                     medianprops=dict(color='red', linewidth=2),
+                                     meanprops=dict(marker='D', markerfacecolor='green', 
+                                                   markersize=8),
+                                     flierprops=dict(marker='o', markerfacecolor='red', 
+                                                    markersize=6, alpha=0.7))
+        
+        axes_flat[idx].set_ylabel(var, fontsize=11)
+        axes_flat[idx].set_title(var, fontsize=12, fontweight='bold')
+        axes_flat[idx].grid(True, alpha=0.3, axis='y')
+    
+    for idx in range(n_vars, len(axes_flat)):
+        axes_flat[idx].axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
+print("\n\n" + "=" * 80)
+print("RECOMMENDATIONS")
+print("=" * 80)
+
+n_normal = sum(1 for r in results_list if r['Normal'] == 'Yes')
+n_total = len(results_list)
+
+print(f"\nNormality Summary:")
+print(f"Normal distributions: {n_normal}/{n_total}")
+print(f"Non-normal distributions: {n_total - n_normal}/{n_total}")
+
+print(f"\nVariables with outliers:")
+for r in results_list:
+    if r['Outliers_IQR'] > 0 or r['Outliers_Zscore'] > 0:
+        print(f"  {r['Variable']}: {r['Outliers_IQR']} outliers (IQR method)")
+
+print(f"\n{'='*80}")
+print("STATISTICAL TEST RECOMMENDATIONS:")
+print(f"{'='*80}")
+
+print("\nFor variables that are NOT normal:")
+print("  → Use NON-PARAMETRIC tests:")
+print("    • Mann-Whitney U test (2 groups)")
+print("    • Kruskal-Wallis test (3+ groups)")
+print("    • Spearman correlation")
+
+print("\nFor variables that ARE normal:")
+print("  → Use PARAMETRIC tests:")
+print("    • Independent t-test (2 groups)")
+print("    • One-way ANOVA (3+ groups)")
+print("    • Pearson correlation")
+
+print("\nFor variables with OUTLIERS:")
+print("  → Consider:")
+print("    • Using non-parametric tests (more robust)")
+print("    • Removing outliers (if justified)")
+print("    • Transforming data (log, square root)")
+print("    • Reporting with and without outliers")
