@@ -1,6 +1,6 @@
 # OC-D-Portfolio
 A portfolio of projects and scripts utilising Python coding
-The file 'Demo_Data.xlsx' can be downloaded to run the scripts
+The file 'Demo_Data.xlsx' can be downloaded to run the scripts - this is basic dummy data to demonstrate the workability of the scripts in this portfolio, this data has been created for this purpose only
 
 ====
 NORMALITY AND OUTLIERS SCRIPT
