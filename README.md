@@ -1,5 +1,6 @@
 # OC-D-Portfolio
 A portfolio of projects and scripts utilising Python coding
+The file 'Demo_Data.xlsx' can be downloaded to run the scripts
 
 ====
 NORMALITY AND OUTLIERS SCRIPT
