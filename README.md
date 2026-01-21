@@ -20,10 +20,4 @@ Independent Groups t-Tests
 A Python script utilising Pandas, SciPy, NumPy, Matplotlib and Seaborn packages
 The script automates normality checks and independent t-tests, conducting 6 independent tests comparing differences between groups in Weight or BMI at each time point (baseline, post-intervention, follow-up)
 
-====
-Visualisations
-====
-Included are visualisations created using Python
-i) Geographical visualisation of study distribution included in systematic review currently undergoing review for peer-review publication.
-ii) Sankey diagram used to visualise the modules and assessments in each module, of current multi-modal research protocol (Hearts and Minds/E-LAB Study)
 
