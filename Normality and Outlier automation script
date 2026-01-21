@@ -3,6 +3,8 @@ from scipy import stats
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+# Select the Demo_Data file
 df = pd.read_excel(r'')
 
 sns.set_style("whitegrid")
@@ -11,7 +13,7 @@ print("=" * 80)
 print("NORMALITY AND OUTLIER CHECK FOR MULTIPLE VARIABLES")
 print("=" * 80)
 
-variables = ['Age_MD1', 'BMI_MD1']
+variables = ['Age_y', 'Baseline', 'Post_Int', 'Followup', 'Height_m', 'BMI_baseline', BMI_Post_Int', 'BMI_Followup']
 
 
 def detect_outliers(data, variable_name):
