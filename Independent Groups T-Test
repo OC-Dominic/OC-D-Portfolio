@@ -1,0 +1,179 @@
+import pandas as pd
+import numpy as np
+from scipy import stats
+import matplotlib.pyplot as plt
+import seaborn as sns
+df = pd.read_excel(r'')
+
+sns.set_style("whitegrid")
+plt.rcParams['figure.figsize'] = (12, 8)
+
+def check_normality(data, alpha=0.05):
+    if len(data) < 3:
+        return False
+    stat, p_value = stats.shapiro(data)
+    return p_value > alpha
+
+def perform_comparison(group1_data, group2_data, var_name, timepoint):
+    g1 = group1_data.dropna()
+    g2 = group2_data.dropna()
+    
+    g1_normal = check_normality(g1)
+    g2_normal = check_normality(g2)
+    
+    results = {
+        'Variable': var_name,
+        'Timepoint': timepoint,
+        'Group1_N': len(g1),
+        'Group1_Mean': g1.mean(),
+        'Group1_SD': g1.std(),
+        'Group1_Median': g1.median(),
+        'Group2_N': len(g2),
+        'Group2_Mean': g2.mean(),
+        'Group2_SD': g2.std(),
+        'Group2_Median': g2.median(),
+        'Group1_Normal': g1_normal,
+        'Group2_Normal': g2_normal
+    }
+    
+    if g1_normal and g2_normal:
+        levene_stat, levene_p = stats.levene(g1, g2)
+        equal_var = levene_p > 0.05
+        
+        t_stat, p_value = stats.ttest_ind(g1, g2, equal_var=equal_var)
+        
+        pooled_std = np.sqrt((g1.std()**2 + g2.std()**2) / 2)
+        cohens_d = (g1.mean() - g2.mean()) / pooled_std
+        
+        results.update({
+            'Test_Used': "Independent t-test" + (" (Welch's)" if not equal_var else ""),
+            'Test_Statistic': t_stat,
+            'P_Value': p_value,
+            'Effect_Size': cohens_d,
+            'Effect_Size_Type': "Cohen's d"
+        })
+    else:
+        u_stat, p_value = stats.mannwhitneyu(g1, g2, alternative='two-sided')
+        
+        n1, n2 = len(g1), len(g2)
+        r = 1 - (2*u_stat) / (n1 * n2)
+        
+        results.update({
+            'Test_Used': 'Mann-Whitney U test',
+            'Test_Statistic': u_stat,
+            'P_Value': p_value,
+            'Effect_Size': r,
+            'Effect_Size_Type': 'Rank-biserial correlation'
+        })
+    
+    return results
+
+def create_comparison_plots(df, output_file='group_comparisons.png'):
+    
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    fig.suptitle('Group Comparisons: Weight and BMI Across Timepoints', 
+                 fontsize=16, fontweight='bold')
+    
+    timepoints = ['Baseline', 'Post_Int', 'Followup']
+    weight_cols = ['Baseline', 'Post_Int', 'Followup']
+    bmi_cols = ['BMI_Baseline', 'BMI_Post_Int', 'BMI_Followup']
+    
+    for idx, (tp, w_col) in enumerate(zip(timepoints, weight_cols)):
+        ax = axes[0, idx]
+        data_to_plot = [df[df['Group'] == 1][w_col].dropna(), 
+                        df[df['Group'] == 2][w_col].dropna()]
+        
+        bp = ax.boxplot(data_to_plot, tick_labels=['Group 1', 'Group 2'],
+                        patch_artist=True, showmeans=True)
+        
+        colors = ['lightblue', 'lightcoral']
+        for patch, color in zip(bp['boxes'], colors):
+            patch.set_facecolor(color)
+        
+        ax.set_title(f'Weight - {tp}', fontweight='bold')
+        ax.set_ylabel('Weight (kg)')
+        ax.grid(True, alpha=0.3)
+    
+    for idx, (tp, bmi_col) in enumerate(zip(timepoints, bmi_cols)):
+        ax = axes[1, idx]
+        data_to_plot = [df[df['Group'] == 1][bmi_col].dropna(), 
+                        df[df['Group'] == 2][bmi_col].dropna()]
+        
+        bp = ax.boxplot(data_to_plot, tick_labels=['Group 1', 'Group 2'],
+                        patch_artist=True, showmeans=True)
+        
+        colors = ['lightblue', 'lightcoral']
+        for patch, color in zip(bp['boxes'], colors):
+            patch.set_facecolor(color)
+        
+        ax.set_title(f'BMI - {tp}', fontweight='bold')
+        ax.set_ylabel('BMI (kg/m²)')
+        ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    print(f"\nVisualization saved as: {output_file}")
+    return fig
+
+def main():
+    print(f"Total participants: {len(df)}")
+    print(f"Group 1: n = {len(df[df['Group'] == 1])}")
+    print(f"Group 2: n = {len(df[df['Group'] == 2])}")
+    
+    group1 = df[df['Group'] == 1]
+    group2 = df[df['Group'] == 2]
+    
+    comparisons = [
+        ('Baseline', 'Baseline', 'Weight'),
+        ('Post_Int', 'Post-Intervention', 'Weight'),
+        ('Followup', 'Follow-up', 'Weight'),
+        ('BMI_Baseline', 'Baseline', 'BMI'),
+        ('BMI_Post_Int', 'Post-Intervention', 'BMI'),
+        ('BMI_Followup', 'Follow-up', 'BMI')
+    ]
+    
+    all_results = []
+    print("\n" + "="*80)
+    print("STATISTICAL COMPARISONS")
+    print("="*80)
+    
+    for col_name, timepoint, var_type in comparisons:
+        print(f"\n{var_type} - {timepoint}")
+        print("-" * 40)
+        
+        results = perform_comparison(
+            group1[col_name], 
+            group2[col_name], 
+            var_type, 
+            timepoint
+        )
+        all_results.append(results)
+        
+        print(f"Group 1: M = {results['Group1_Mean']:.2f}, SD = {results['Group1_SD']:.2f}, "
+              f"Mdn = {results['Group1_Median']:.2f} (n = {results['Group1_N']})")
+        print(f"Group 2: M = {results['Group2_Mean']:.2f}, SD = {results['Group2_SD']:.2f}, "
+              f"Mdn = {results['Group2_Median']:.2f} (n = {results['Group2_N']})")
+        print(f"\nNormality: Group 1 = {results['Group1_Normal']}, Group 2 = {results['Group2_Normal']}")
+        print(f"Test: {results['Test_Used']}")
+        print(f"Test Statistic: {results['Test_Statistic']:.4f}")
+        print(f"P-value: {results['P_Value']:.4f} {'***' if results['P_Value'] < 0.001 else '**' if results['P_Value'] < 0.01 else '*' if results['P_Value'] < 0.05 else 'ns'}")
+        print(f"Effect Size ({results['Effect_Size_Type']}): {results['Effect_Size']:.4f}")
+
+    results_df = pd.DataFrame(all_results)
+    
+    print("\n" + "="*80)
+    print("SUMMARY")
+    print("="*80)
+    sig_results = results_df[results_df['P_Value'] < 0.05]
+    if len(sig_results) > 0:
+        print(f"\nSignificant differences found at α = 0.05:")
+        for _, row in sig_results.iterrows():
+            print(f"  • {row['Variable']} at {row['Timepoint']}: p = {row['P_Value']:.4f}")
+    else:
+        print("\nNo significant differences found between groups at α = 0.05")
+    
+    
+    return results_df
+
+if __name__ == "__main__":
+    results = main()
